@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
-import { stripe } from "@/lib/stripe/client";
+import { getStripe } from "@/lib/stripe/client";
 import { createClient } from "@/lib/supabase/server";
 import type { Plan } from "@/types";
 
@@ -43,6 +43,8 @@ export async function POST(request: Request) {
   if (!sig) {
     return NextResponse.json({ error: "No signature" }, { status: 400 });
   }
+
+  const stripe = getStripe();
 
   let event: Stripe.Event;
   try {

@@ -1,4 +1,4 @@
-import { stripe } from "./client";
+import { getStripe } from "./client";
 import { createClient } from "@/lib/supabase/server";
 import type { Plan } from "@/types";
 
@@ -13,6 +13,7 @@ export async function syncSubscriptionState(userId: string) {
   if (!profile?.stripe_customer_id) return;
 
   try {
+    const stripe = getStripe();
     const subscriptions = await stripe.subscriptions.list({
       customer: profile.stripe_customer_id,
       status: "active",
