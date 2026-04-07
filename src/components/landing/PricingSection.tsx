@@ -155,14 +155,14 @@ export default function PricingSection() {
 
                   {plan.highlighted ? (
                     <Button
-                      asChild
+                      render={<Link href={plan.href} />}
                       className="mt-8 h-10 w-full border-0 bg-gradient-to-r from-indigo-500 to-violet-600 font-semibold text-white shadow-md shadow-indigo-500/25 transition-[filter,box-shadow] duration-200 hover:brightness-110 hover:shadow-lg hover:shadow-indigo-500/30"
                     >
-                      <Link href={plan.href}>{plan.cta}</Link>
+                      {plan.cta}
                     </Button>
                   ) : (
-                    <Button asChild variant="outline" className="mt-8 w-full">
-                      <Link href={plan.href}>{plan.cta}</Link>
+                    <Button render={<Link href={plan.href} />} variant="outline" className="mt-8 w-full">
+                      {plan.cta}
                     </Button>
                   )}
                 </CardContent>

@@ -200,11 +200,11 @@ export default function DesignPreview() {
                 Create a free account to iterate, refine, and export your schematics.
               </p>
               <Button
-                asChild
+                render={<Link href="/sign-up" />}
                 size="lg"
                 className="w-full max-w-xs bg-gradient-to-r from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-950/40 hover:from-indigo-600 hover:to-violet-700 sm:w-auto"
               >
-                <Link href="/sign-up">Create Free Account</Link>
+                Create Free Account
               </Button>
               <p className="mt-3 text-xs text-muted-foreground">
                 Already have an account?{" "}

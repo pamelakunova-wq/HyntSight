@@ -86,19 +86,14 @@ export default function Navbar() {
         </div>
 
         <div className="hidden items-center gap-3 md:flex">
-          <Button variant="ghost" size="default" asChild>
-            <Link
-              href="/sign-in"
-              className="text-zinc-200 hover:text-white"
-            >
+          <Button variant="ghost" size="default" render={<Link href="/sign-in" />} className="text-zinc-200 hover:text-white">
               Sign In
-            </Link>
           </Button>
           <Button
-            asChild
+            render={<Link href="/sign-up" />}
             className="h-9 border-0 bg-gradient-to-r from-indigo-500 to-violet-600 px-4 font-semibold text-white shadow-lg shadow-indigo-500/25 transition-[box-shadow,filter] duration-200 hover:brightness-110 hover:shadow-indigo-500/35 focus-visible:ring-violet-400/40"
           >
-            <Link href="/sign-up">Get Started Free</Link>
+            Get Started Free
           </Button>
         </div>
 
@@ -176,19 +171,15 @@ export default function Navbar() {
                 Pricing
               </a>
               <div className="mt-4 flex flex-col gap-3 border-t border-white/[0.06] pt-4">
-                <Button variant="ghost" size="lg" asChild className="w-full justify-center">
-                  <Link href="/sign-in" onClick={() => setMobileOpen(false)}>
+                <Button variant="ghost" size="lg" render={<Link href="/sign-in" onClick={() => setMobileOpen(false)} />} className="w-full justify-center">
                     Sign In
-                  </Link>
                 </Button>
                 <Button
-                  asChild
                   size="lg"
+                  render={<Link href="/sign-up" onClick={() => setMobileOpen(false)} />}
                   className="w-full justify-center border-0 bg-gradient-to-r from-indigo-500 to-violet-600 font-semibold text-white shadow-lg shadow-indigo-500/25 hover:brightness-110"
                 >
-                  <Link href="/sign-up" onClick={() => setMobileOpen(false)}>
                     Get Started Free
-                  </Link>
                 </Button>
               </div>
             </motion.div>

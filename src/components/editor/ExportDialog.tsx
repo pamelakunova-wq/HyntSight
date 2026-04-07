@@ -64,7 +64,9 @@ export default function ExportDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<>{children}</>} />
+      <DialogTrigger render={<span style={{ display: "contents" }} />}>
+        {children}
+      </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Export Design</DialogTitle>

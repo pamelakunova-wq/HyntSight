@@ -26,8 +26,8 @@ export default function StudioError({
           <Button onClick={reset} variant="outline">
             Try Again
           </Button>
-          <Button asChild variant="default">
-            <Link href="/dashboard">Back to Dashboard</Link>
+          <Button render={<Link href="/dashboard" />} variant="default">
+            Back to Dashboard
           </Button>
         </div>
       </div>
