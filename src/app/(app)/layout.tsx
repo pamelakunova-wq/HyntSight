@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,32 +18,38 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen flex">
       {/* Desktop sidebar */}
       <aside className="hidden md:flex">
-        <Sidebar />
+        <Suspense fallback={<div className="h-full w-64 border-r bg-card" />}>
+          <Sidebar />
+        </Suspense>
       </aside>
 
       {/* Mobile sidebar */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="w-64 p-0" showCloseButton={false}>
           <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <Sidebar closeMobile={() => setMobileOpen(false)} />
+          <Suspense fallback={<div className="h-full w-64 bg-card" />}>
+            <Sidebar closeMobile={() => setMobileOpen(false)} />
+          </Suspense>
         </SheetContent>
       </Sheet>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col">
-        <header className="flex items-center gap-4 border-b px-4 py-3 md:hidden">
+      <div className="flex min-h-screen flex-1 flex-col bg-background">
+        <header className="flex items-center gap-4 border-b border-white/5 px-4 py-3 md:hidden">
           <Button
+            type="button"
             variant="ghost"
             size="icon"
+            aria-label="Open navigation"
             onClick={() => setMobileOpen(true)}
           >
             <Menu className="size-5" />
           </Button>
-          <span className="text-lg font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-indigo-400 via-violet-400 to-purple-400 bg-clip-text text-lg font-bold text-transparent">
             HyntSight
           </span>
         </header>
-        <main className="flex-1 p-6">{children}</main>
+        <main className="flex-1 bg-background p-6">{children}</main>
         <Toaster />
       </div>
     </div>

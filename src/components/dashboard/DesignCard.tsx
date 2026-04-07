@@ -28,18 +28,18 @@ const statusColors: Record<string, "default" | "secondary" | "outline"> = {
 export function DesignCard({ design }: { design: Design }) {
   return (
     <Link href={`/studio/${design.id}`}>
-      <Card className="group cursor-pointer transition-all hover:ring-2 hover:ring-primary/50">
+      <Card className="group cursor-pointer border-border/80 transition-all duration-200 hover:border-indigo-500/30 hover:shadow-lg hover:shadow-indigo-500/5">
         {design.thumbnail_url ? (
           <img
             src={design.thumbnail_url}
             alt={design.name}
-            className="h-40 w-full object-cover rounded-t-xl"
+            className="h-40 w-full rounded-t-xl object-cover"
           />
         ) : (
-          <div className="h-40 w-full rounded-t-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20" />
+          <div className="h-40 w-full rounded-t-xl bg-gradient-to-br from-indigo-500/20 to-violet-500/20" />
         )}
         <CardContent className="flex flex-col gap-2 pt-3">
-          <p className="font-medium truncate">{design.name}</p>
+          <p className="truncate font-medium">{design.name}</p>
           <div className="flex items-center gap-2">
             {design.garment_type && (
               <Badge variant="secondary">{design.garment_type}</Badge>
