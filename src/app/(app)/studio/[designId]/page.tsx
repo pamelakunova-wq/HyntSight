@@ -9,7 +9,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useEditorStore } from "@/stores/editorStore";
 import { createClient } from "@/lib/supabase/client";
-import type { Design, DesignVersion, Plan } from "@/types";
+import { useGenerate } from "@/hooks/useGenerate";
+import { useIterate } from "@/hooks/useIterate";
+import { loadSVGToCanvas, generateThumbnail } from "@/lib/editor/svg-loader";
+import { downloadSVG } from "@/lib/editor/export-svg";
+import { downloadPNG } from "@/lib/editor/export-png";
+import { downloadDXF } from "@/lib/editor/export-dxf";
+import { downloadPDF } from "@/lib/editor/export-pdf";
+import type { Design, DesignVersion, Plan, ExportFormat } from "@/types";
 import Toolbar from "@/components/editor/Toolbar";
 import LayerPanel from "@/components/editor/LayerPanel";
 import PropertiesPanel from "@/components/editor/PropertiesPanel";
@@ -38,8 +45,11 @@ export default function StudioPage({ params }: PageProps) {
   const [userPlan, setUserPlan] = useState<Plan>("spark");
   const [loading, setLoading] = useState(true);
 
-  const { canvas, isSaving, setIsSaving, lastSaved, setLastSaved } =
+  const { canvas, isSaving, setIsSaving, lastSaved, setLastSaved, setZoom } =
     useEditorStore();
+
+  const { generate, isGenerating, error: genError } = useGenerate();
+  const { iterate, isIterating, error: iterError } = useIterate();
 
   useEffect(() => {
     params.then((p) => setDesignId(p.designId));
@@ -65,9 +75,10 @@ export default function StudioPage({ params }: PageProps) {
         setDesign(designRes.data as Design);
       }
       if (versionsRes.data) {
-        setVersions(versionsRes.data as DesignVersion[]);
-        if (versionsRes.data.length > 0) {
-          setActiveVersionId(versionsRes.data[0].id);
+        const typedVersions = versionsRes.data as DesignVersion[];
+        setVersions(typedVersions);
+        if (typedVersions.length > 0) {
+          setActiveVersionId(typedVersions[0].id);
         }
       }
       if (userRes.data.user) {
@@ -88,11 +99,20 @@ export default function StudioPage({ params }: PageProps) {
   }, [designId]);
 
   useEffect(() => {
-    if (!canvas || !design?.current_canvas_json) return;
-    canvas.loadFromJSON(design.current_canvas_json).then(() => {
-      canvas.renderAll();
-    });
-  }, [canvas, design]);
+    if (!canvas || !versions.length) return;
+
+    const latestVersion = versions[0];
+    if (latestVersion?.generated_svg) {
+      loadSVGToCanvas(canvas, latestVersion.generated_svg).then(() => {
+        const vpt = canvas.viewportTransform;
+        if (vpt) setZoom(vpt[0]);
+      });
+    } else if (design?.current_canvas_json) {
+      canvas.loadFromJSON(design.current_canvas_json).then(() => {
+        canvas.renderAll();
+      });
+    }
+  }, [canvas, versions, design, setZoom]);
 
   const handleSave = useCallback(async () => {
     if (!canvas || !designId) return;
@@ -124,27 +144,135 @@ export default function StudioPage({ params }: PageProps) {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [handleSave]);
 
-  const handleGenerate = async (prompt: string) => {
-    // Placeholder for AI generation integration
-    console.log("Generate:", prompt, "designId:", designId);
-  };
+  const refreshVersions = useCallback(async () => {
+    if (!designId) return;
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("design_versions")
+      .select("*")
+      .eq("design_id", designId)
+      .order("version_number", { ascending: false });
+    if (data) setVersions(data as DesignVersion[]);
+  }, [designId]);
 
-  const handleIterate = async (feedback: string) => {
-    // Placeholder for AI iteration integration
-    console.log("Iterate:", feedback, "designId:", designId);
-  };
+  const uploadThumbnail = useCallback(async () => {
+    if (!canvas || !designId) return;
+    try {
+      const thumbnailDataUrl = generateThumbnail(canvas);
+      const res = await fetch(thumbnailDataUrl);
+      const blob = await res.blob();
+      const supabase = createClient();
+      const thumbPath = `thumbnails/${designId}.png`;
+      await supabase.storage
+        .from("generated-designs")
+        .upload(thumbPath, blob, {
+          contentType: "image/png",
+          upsert: true,
+        });
+      const { data: urlData } = supabase.storage
+        .from("generated-designs")
+        .getPublicUrl(thumbPath);
+      await supabase
+        .from("designs")
+        .update({ thumbnail_url: urlData.publicUrl })
+        .eq("id", designId);
+    } catch {
+      // Thumbnail upload is non-critical
+    }
+  }, [canvas, designId]);
 
-  const handleExport = async (format: string, quality?: number) => {
-    // Placeholder for export integration
-    console.log("Export:", format, quality);
-  };
+  const handleGenerate = useCallback(
+    async (prompt: string) => {
+      if (!canvas || !designId || !design) return;
 
-  const handleLoadVersion = async (version: DesignVersion) => {
-    if (!canvas) return;
-    await canvas.loadFromJSON(version.canvas_json);
-    canvas.renderAll();
-    setActiveVersionId(version.id);
-  };
+      const result = await generate(
+        prompt,
+        [],
+        design.garment_type || "",
+        designId
+      );
+
+      await loadSVGToCanvas(canvas, result.svgContent);
+      const vpt = canvas.viewportTransform;
+      if (vpt) setZoom(vpt[0]);
+
+      setActiveVersionId(result.versionId);
+      await refreshVersions();
+      await uploadThumbnail();
+    },
+    [canvas, designId, design, generate, refreshVersions, uploadThumbnail, setZoom]
+  );
+
+  const handleIterate = useCallback(
+    async (feedback: string) => {
+      if (!canvas || !designId || !activeVersionId) return;
+
+      const currentSVG = canvas.toSVG();
+
+      const result = await iterate(
+        designId,
+        feedback,
+        useEditorStore.getState().selectedFeedbackArea ?? undefined,
+        activeVersionId,
+        currentSVG
+      );
+
+      await loadSVGToCanvas(canvas, result.svgContent);
+      const vpt = canvas.viewportTransform;
+      if (vpt) setZoom(vpt[0]);
+
+      setActiveVersionId(result.versionId);
+      await refreshVersions();
+      await uploadThumbnail();
+    },
+    [canvas, designId, activeVersionId, iterate, refreshVersions, uploadThumbnail, setZoom]
+  );
+
+  const handleExport = useCallback(
+    async (format: ExportFormat | string, quality?: number) => {
+      if (!canvas) return;
+      const filename = `${design?.name || "design"}-v${versions[0]?.version_number || 1}`;
+
+      switch (format) {
+        case "svg":
+          downloadSVG(canvas, `${filename}.svg`);
+          break;
+        case "png":
+          downloadPNG(canvas, `${filename}.png`, {
+            scale: quality ?? 2,
+            watermark: userPlan === "spark",
+          });
+          break;
+        case "dxf":
+          downloadDXF(canvas, `${filename}.dxf`);
+          break;
+        case "pdf":
+          downloadPDF(canvas, `${filename}.pdf`, {
+            title: design?.name,
+          });
+          break;
+      }
+    },
+    [canvas, design, versions, userPlan]
+  );
+
+  const handleLoadVersion = useCallback(
+    async (version: DesignVersion) => {
+      if (!canvas) return;
+
+      if (version.generated_svg) {
+        await loadSVGToCanvas(canvas, version.generated_svg);
+        const vpt = canvas.viewportTransform;
+        if (vpt) setZoom(vpt[0]);
+      } else if (version.canvas_json && Object.keys(version.canvas_json).length > 0) {
+        await canvas.loadFromJSON(version.canvas_json);
+        canvas.renderAll();
+      }
+
+      setActiveVersionId(version.id);
+    },
+    [canvas, setZoom]
+  );
 
   if (loading) {
     return (
@@ -166,7 +294,9 @@ export default function StudioPage({ params }: PageProps) {
     );
   }
 
-  const hasGeneratedImage = versions.some((v) => v.generated_image_url);
+  const hasGeneratedDesign = versions.some(
+    (v) => v.generated_svg || v.generated_image_url
+  );
 
   return (
     <div className="flex h-full flex-col">
@@ -181,6 +311,19 @@ export default function StudioPage({ params }: PageProps) {
         <h1 className="text-sm font-medium truncate">
           {design?.name ?? "Untitled Design"}
         </h1>
+
+        {(isGenerating || isIterating) && (
+          <span className="flex items-center gap-1.5 text-xs text-indigo-400">
+            <Loader2 className="size-3 animate-spin" />
+            {isGenerating ? "Generating..." : "Iterating..."}
+          </span>
+        )}
+
+        {(genError || iterError) && (
+          <span className="text-xs text-red-400 truncate max-w-60">
+            {genError || iterError}
+          </span>
+        )}
 
         <div className="ml-auto flex items-center gap-2">
           {lastSaved && (
@@ -204,10 +347,7 @@ export default function StudioPage({ params }: PageProps) {
             Save
           </Button>
 
-          <ExportDialog
-            userPlan={userPlan}
-            onExport={handleExport}
-          >
+          <ExportDialog userPlan={userPlan} onExport={handleExport}>
             <Button variant="outline" size="sm">
               <Download className="size-3.5" />
               Export
@@ -226,29 +366,29 @@ export default function StudioPage({ params }: PageProps) {
 
         {/* Right: Panels */}
         <div className="flex w-72 flex-col border-l bg-background">
-          <Tabs defaultValue="layers" className="flex h-full flex-col">
+          <Tabs defaultValue="ai" className="flex h-full flex-col">
             <TabsList className="shrink-0 w-full rounded-none border-b">
+              <TabsTrigger value="ai">AI</TabsTrigger>
               <TabsTrigger value="layers">Layers</TabsTrigger>
               <TabsTrigger value="properties">Properties</TabsTrigger>
-              <TabsTrigger value="ai">AI</TabsTrigger>
               <TabsTrigger value="versions">History</TabsTrigger>
             </TabsList>
-            <TabsContent value="layers" className="flex-1 overflow-auto">
-              <LayerPanel />
-            </TabsContent>
-            <TabsContent value="properties" className="flex-1 overflow-auto">
-              <PropertiesPanel />
-            </TabsContent>
             <TabsContent value="ai" className="flex-1 overflow-auto">
               {designId && (
                 <FeedbackPanel
                   designId={designId}
                   currentVersionId={activeVersionId}
-                  hasGeneratedImage={hasGeneratedImage}
+                  hasGeneratedImage={hasGeneratedDesign}
                   onGenerate={handleGenerate}
                   onIterate={handleIterate}
                 />
               )}
+            </TabsContent>
+            <TabsContent value="layers" className="flex-1 overflow-auto">
+              <LayerPanel />
+            </TabsContent>
+            <TabsContent value="properties" className="flex-1 overflow-auto">
+              <PropertiesPanel />
             </TabsContent>
             <TabsContent value="versions" className="flex-1 overflow-auto">
               <VersionHistory

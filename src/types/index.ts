@@ -19,6 +19,7 @@ export interface Profile {
   full_name: string | null;
   avatar_url: string | null;
   plan: Plan;
+  is_admin: boolean;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   designs_used_this_period: number;
@@ -57,6 +58,8 @@ export interface DesignVersion {
   version_number: number;
   canvas_json: Record<string, unknown>;
   generated_image_url: string | null;
+  generated_svg: string | null;
+  ai_notes: string | null;
   feedback_prompt: string | null;
   feedback_area: FeedbackArea | null;
   parent_version_id: string | null;
@@ -95,6 +98,8 @@ export interface IterationRequest {
   feedback: string;
   selectedArea?: FeedbackArea;
   currentVersionId: string;
+  currentSVG?: string;
+  referenceImageUrls?: string[];
 }
 
 export const PLAN_LIMITS: Record<

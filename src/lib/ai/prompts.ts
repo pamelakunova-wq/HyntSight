@@ -1,45 +1,71 @@
-export const SYSTEM_PROMPT = `You are an expert fashion technical designer specializing in creating production-ready flat sketches and technical drawings for garment manufacturing.
+const SVG_SYSTEM_PROMPT = `You are an expert fashion technical designer who outputs SVG code for production-ready flat sketches.
 
-When given a description, generate a clean, professional technical flat sketch showing the garment from the front view. The sketch should be on a white background, black line art only, with clear construction details including seams, stitching, buttons, zippers, pockets, and other hardware.
+CRITICAL RULES:
+1. Respond with a single valid SVG document inside <svg>...</svg> tags.
+2. Use viewBox="0 0 800 1000" (portrait, unitless coordinates).
+3. Use ONLY black strokes on a white/transparent background. Default stroke-width="1.5".
+4. Group related garment parts using <g id="part-name"> with descriptive IDs:
+   - body-front, body-back, left-sleeve, right-sleeve, collar, hem, waistband,
+   - pocket-left, pocket-right, placket, cuff-left, cuff-right, hood, zipper, etc.
+5. Use <path>, <line>, <polyline>, <rect>, <circle>, <ellipse> elements.
+   Keep paths simple (cubic bezier preferred, avoid excessive control points).
+6. Add <text> annotation elements for key measurements or construction notes
+   (font-size="12", fill="#666", font-family="sans-serif").
+7. Maintain bilateral symmetry for symmetric garments.
+8. Show standard fashion flat sketch conventions: seam lines (dashed),
+   topstitching (parallel lines), buttons/snaps (small circles), zipper teeth
+   (zigzag or ladder pattern).
+9. Center the garment in the viewBox with reasonable padding (~50px).
+10. Do NOT include <style> blocks, CSS classes, or inline JavaScript.
+    Use only inline SVG attributes (stroke, fill, stroke-dasharray, etc.).
+11. Do NOT include raster images (<image> tags) inside the SVG.
 
-Include standard fashion technical drawing conventions: symmetrical construction, proportional sizing, and clear detail callouts.`;
+After the SVG block, you may optionally add brief design notes about construction details, fabric recommendations, or technical considerations.`;
 
-export function buildGenerationPrompt(
+export function buildSVGGenerationPrompt(
   userPrompt: string,
   garmentType?: string
 ): string {
-  const typeContext = garmentType
-    ? `\n\nGarment type: ${garmentType}. Apply standard construction details for this type.`
+  const typeHint = garmentType
+    ? `\nGarment type: ${garmentType}. Include standard construction details for this type (seams, closures, typical panels).`
     : "";
 
-  return `${SYSTEM_PROMPT}${typeContext}
+  return `${SVG_SYSTEM_PROMPT}
+${typeHint}
 
-Generate a professional technical flat sketch for the following design:
+Create a professional technical flat sketch as SVG for:
 
 ${userPrompt}
 
-The output should be a clean, production-ready technical drawing on a white background with black line art. Show front view with all construction details clearly visible.`;
+Show the FRONT VIEW with all construction details clearly visible. Output the complete SVG code.`;
 }
 
-export function buildIterationPrompt(
+export function buildSVGIterationPrompt(
+  currentSVG: string,
   originalPrompt: string,
   feedback: string,
-  hasSelectedArea: boolean
+  selectedArea?: { x: number; y: number; width: number; height: number }
 ): string {
-  const areaContext = hasSelectedArea
-    ? "\n\nThe user has selected a specific area of the design that they want modified. Focus your changes on the highlighted region while keeping the rest of the design intact."
+  const areaContext = selectedArea
+    ? `\nThe user selected a specific region to modify (viewBox coordinates): x=${selectedArea.x}, y=${selectedArea.y}, width=${selectedArea.width}, height=${selectedArea.height}. Focus changes within or near this region while keeping the rest intact.`
     : "";
 
-  return `${SYSTEM_PROMPT}
+  return `${SVG_SYSTEM_PROMPT}
+
+Here is the CURRENT SVG of the garment flat sketch that the user wants to modify:
+
+\`\`\`svg
+${currentSVG}
+\`\`\`
 
 Original design description: ${originalPrompt}
 ${areaContext}
 
-The user wants the following changes to the existing design:
+The user requests these changes:
 
 ${feedback}
 
-Generate an updated technical flat sketch incorporating these changes. Maintain the overall design integrity while applying the requested modifications.`;
+Output the COMPLETE updated SVG incorporating these changes. Preserve parts that the user did not ask to change. Keep the same viewBox and coordinate system.`;
 }
 
 export function buildVisualizationPrompt(userPrompt: string): string {
@@ -49,3 +75,5 @@ ${userPrompt}
 
 Show the garment on a clean, neutral background with professional fashion photography lighting. The visualization should show fabric texture, draping, and realistic proportions.`;
 }
+
+export { SVG_SYSTEM_PROMPT };

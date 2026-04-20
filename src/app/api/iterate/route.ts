@@ -18,7 +18,8 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { designId, feedback, selectedArea, currentVersionId } = body;
+    const { designId, feedback, selectedArea, currentVersionId, currentSVG } =
+      body;
 
     if (!designId || !feedback || !currentVersionId) {
       return NextResponse.json(
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
     }
 
     const result = await iterateDesign(
-      { designId, feedback, selectedArea, currentVersionId },
+      { designId, feedback, selectedArea, currentVersionId, currentSVG },
       user.id
     );
 

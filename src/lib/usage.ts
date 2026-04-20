@@ -6,11 +6,21 @@ export async function checkUsageLimit(userId: string) {
   const supabase = await createClient();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("plan, designs_used_this_period")
+    .select("plan, designs_used_this_period, is_admin")
     .eq("id", userId)
     .single();
 
   if (!profile) throw new Error("Profile not found");
+
+  if (profile.is_admin) {
+    return {
+      allowed: true,
+      remaining: Infinity,
+      plan: profile.plan as Plan,
+      used: profile.designs_used_this_period,
+      limit: Infinity,
+    };
+  }
 
   const plan = profile.plan as Plan;
   const limit = PLAN_LIMITS[plan].designs;

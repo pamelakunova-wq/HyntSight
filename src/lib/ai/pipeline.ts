@@ -1,5 +1,9 @@
-import { generateImage } from "./gemini";
-import { buildGenerationPrompt, buildIterationPrompt } from "./prompts";
+import { generateSVG } from "./gemini";
+import {
+  buildSVGGenerationPrompt,
+  buildSVGIterationPrompt,
+} from "./prompts";
+import { normalizeSVG } from "./svg-utils";
 import { createClient } from "@/lib/supabase/server";
 import type { GenerationRequest, IterationRequest } from "@/types";
 
@@ -9,7 +13,7 @@ export async function generateDesign(
 ) {
   const supabase = await createClient();
 
-  const prompt = buildGenerationPrompt(request.prompt, request.garmentType);
+  const prompt = buildSVGGenerationPrompt(request.prompt, request.garmentType);
 
   let referenceBuffers: Buffer[] | undefined;
   if (request.referenceImageUrls?.length) {
@@ -22,13 +26,11 @@ export async function generateDesign(
     );
   }
 
-  const { imageBase64, text } = await generateImage(prompt, referenceBuffers);
-
-  if (!imageBase64) {
-    throw new Error("AI failed to generate an image");
-  }
-
-  const imageBuffer = Buffer.from(imageBase64, "base64");
+  const { svg: rawSvg, notes, model: modelUsed } = await generateSVG(
+    prompt,
+    referenceBuffers
+  );
+  const svgContent = normalizeSVG(rawSvg);
 
   const { data: versions } = await supabase
     .from("design_versions")
@@ -39,18 +41,20 @@ export async function generateDesign(
 
   const nextVersion = (versions?.[0]?.version_number ?? 0) + 1;
 
-  const imagePath = `${userId}/${request.designId}/v${nextVersion}.png`;
+  const svgPath = `${userId}/${request.designId}/v${nextVersion}.svg`;
+  const svgBuffer = Buffer.from(svgContent, "utf-8");
   const { error: uploadError } = await supabase.storage
     .from("generated-designs")
-    .upload(imagePath, imageBuffer, { contentType: "image/png", upsert: true });
+    .upload(svgPath, svgBuffer, {
+      contentType: "image/svg+xml",
+      upsert: true,
+    });
 
   if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
 
   const { data: urlData } = supabase.storage
     .from("generated-designs")
-    .getPublicUrl(imagePath);
-
-  const imageUrl = urlData.publicUrl;
+    .getPublicUrl(svgPath);
 
   const { data: version, error: versionError } = await supabase
     .from("design_versions")
@@ -58,7 +62,9 @@ export async function generateDesign(
       design_id: request.designId,
       version_number: nextVersion,
       canvas_json: {},
-      generated_image_url: imageUrl,
+      generated_svg: svgContent,
+      ai_notes: notes || null,
+      generated_image_url: urlData.publicUrl,
       feedback_prompt: request.prompt,
     })
     .select()
@@ -72,23 +78,21 @@ export async function generateDesign(
     .update({
       status: "ready",
       initial_prompt: request.prompt,
-      thumbnail_url: imageUrl,
     })
     .eq("id", request.designId);
 
   await supabase.from("generation_logs").insert({
     user_id: userId,
     design_id: request.designId,
-    model_used: "gemini-2.0-flash-exp",
-    image_count: 1,
-    cost_usd: 0.039,
+    model_used: modelUsed,
+    image_count: 0,
+    cost_usd: 0.01,
     prompt_text: request.prompt.substring(0, 500),
   });
 
-  void text;
-
   return {
-    imageUrl,
+    svgContent,
+    aiNotes: notes || "",
     versionId: version.id,
     versionNumber: nextVersion,
   };
@@ -108,28 +112,42 @@ export async function iterateDesign(
 
   if (!design) throw new Error("Design not found");
 
-  const currentVersion = (
-    design.design_versions as Array<{ id: string; generated_image_url: string | null }>
-  )?.find((v) => v.id === request.currentVersionId);
+  let currentSVG = request.currentSVG || "";
 
-  const prompt = buildIterationPrompt(
+  if (!currentSVG) {
+    const currentVersion = (
+      design.design_versions as Array<{
+        id: string;
+        generated_svg: string | null;
+      }>
+    )?.find((v) => v.id === request.currentVersionId);
+
+    currentSVG = currentVersion?.generated_svg || "";
+  }
+
+  const prompt = buildSVGIterationPrompt(
+    currentSVG,
     design.initial_prompt || "",
     request.feedback,
-    !!request.selectedArea
+    request.selectedArea
   );
 
   let referenceBuffers: Buffer[] | undefined;
-  if (currentVersion?.generated_image_url) {
-    const res = await fetch(currentVersion.generated_image_url);
-    const buf = await res.arrayBuffer();
-    referenceBuffers = [Buffer.from(buf)];
+  if (request.referenceImageUrls?.length) {
+    referenceBuffers = await Promise.all(
+      request.referenceImageUrls.map(async (url) => {
+        const res = await fetch(url);
+        const arrayBuf = await res.arrayBuffer();
+        return Buffer.from(arrayBuf);
+      })
+    );
   }
 
-  const { imageBase64 } = await generateImage(prompt, referenceBuffers);
-
-  if (!imageBase64) throw new Error("AI failed to generate an image");
-
-  const imageBuffer = Buffer.from(imageBase64, "base64");
+  const { svg: rawSvg, notes, model: modelUsed } = await generateSVG(
+    prompt,
+    referenceBuffers
+  );
+  const svgContent = normalizeSVG(rawSvg);
 
   const { data: versions } = await supabase
     .from("design_versions")
@@ -140,16 +158,18 @@ export async function iterateDesign(
 
   const nextVersion = (versions?.[0]?.version_number ?? 0) + 1;
 
-  const imagePath = `${userId}/${request.designId}/v${nextVersion}.png`;
+  const svgPath = `${userId}/${request.designId}/v${nextVersion}.svg`;
+  const svgBuffer = Buffer.from(svgContent, "utf-8");
   await supabase.storage
     .from("generated-designs")
-    .upload(imagePath, imageBuffer, { contentType: "image/png", upsert: true });
+    .upload(svgPath, svgBuffer, {
+      contentType: "image/svg+xml",
+      upsert: true,
+    });
 
   const { data: urlData } = supabase.storage
     .from("generated-designs")
-    .getPublicUrl(imagePath);
-
-  const imageUrl = urlData.publicUrl;
+    .getPublicUrl(svgPath);
 
   const { data: version, error: versionError } = await supabase
     .from("design_versions")
@@ -157,7 +177,9 @@ export async function iterateDesign(
       design_id: request.designId,
       version_number: nextVersion,
       canvas_json: {},
-      generated_image_url: imageUrl,
+      generated_svg: svgContent,
+      ai_notes: notes || null,
+      generated_image_url: urlData.publicUrl,
       feedback_prompt: request.feedback,
       feedback_area: request.selectedArea ?? null,
       parent_version_id: request.currentVersionId,
@@ -168,22 +190,18 @@ export async function iterateDesign(
   if (versionError)
     throw new Error(`Version creation failed: ${versionError.message}`);
 
-  await supabase
-    .from("designs")
-    .update({ thumbnail_url: imageUrl })
-    .eq("id", request.designId);
-
   await supabase.from("generation_logs").insert({
     user_id: userId,
     design_id: request.designId,
-    model_used: "gemini-2.0-flash-exp",
-    image_count: 1,
-    cost_usd: 0.044,
+    model_used: modelUsed,
+    image_count: 0,
+    cost_usd: 0.012,
     prompt_text: request.feedback.substring(0, 500),
   });
 
   return {
-    imageUrl,
+    svgContent,
+    aiNotes: notes || "",
     versionId: version.id,
     versionNumber: nextVersion,
   };

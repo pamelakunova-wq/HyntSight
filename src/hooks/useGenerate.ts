@@ -2,6 +2,13 @@
 
 import { useState } from "react";
 
+export interface GenerateResult {
+  svgContent: string;
+  aiNotes: string;
+  versionId: string;
+  versionNumber: number;
+}
+
 export function useGenerate() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -11,7 +18,7 @@ export function useGenerate() {
     referenceImageUrls: string[],
     garmentType: string,
     designId: string
-  ) {
+  ): Promise<GenerateResult> {
     setIsGenerating(true);
     setError(null);
 
@@ -33,11 +40,7 @@ export function useGenerate() {
         throw new Error(data.error?.message ?? "Generation failed");
       }
 
-      return data as {
-        imageUrl: string;
-        versionId: string;
-        versionNumber: number;
-      };
+      return data as GenerateResult;
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Generation failed";

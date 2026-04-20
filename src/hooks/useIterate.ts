@@ -3,6 +3,13 @@
 import { useState } from "react";
 import type { FeedbackArea } from "@/types";
 
+export interface IterateResult {
+  svgContent: string;
+  aiNotes: string;
+  versionId: string;
+  versionNumber: number;
+}
+
 export function useIterate() {
   const [isIterating, setIsIterating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -11,8 +18,9 @@ export function useIterate() {
     designId: string,
     feedback: string,
     selectedArea: FeedbackArea | undefined,
-    currentVersionId: string
-  ) {
+    currentVersionId: string,
+    currentSVG?: string
+  ): Promise<IterateResult> {
     setIsIterating(true);
     setError(null);
 
@@ -25,6 +33,7 @@ export function useIterate() {
           feedback,
           selectedArea,
           currentVersionId,
+          currentSVG,
         }),
       });
 
@@ -34,11 +43,7 @@ export function useIterate() {
         throw new Error(data.error?.message ?? "Iteration failed");
       }
 
-      return data as {
-        imageUrl: string;
-        versionId: string;
-        versionNumber: number;
-      };
+      return data as IterateResult;
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Iteration failed";

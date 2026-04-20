@@ -26,6 +26,7 @@ export default function EditorCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
+  const initedRef = useRef(false);
   const {
     setCanvas,
     setZoom,
@@ -102,6 +103,8 @@ export default function EditorCanvas() {
     async function init() {
       const fabric = await import("fabric");
       if (!canvasRef.current || !containerRef.current) return;
+      if (initedRef.current) return;
+      initedRef.current = true;
 
       fabricCanvas = new fabric.Canvas(canvasRef.current, {
         backgroundColor: "#ffffff",
@@ -158,7 +161,13 @@ export default function EditorCanvas() {
       });
 
       const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.code === "Space" && !e.repeat) {
+        const tag = (e.target as HTMLElement)?.tagName;
+        const isTyping =
+          tag === "INPUT" ||
+          tag === "TEXTAREA" ||
+          (e.target as HTMLElement)?.isContentEditable;
+
+        if (e.code === "Space" && !e.repeat && !isTyping) {
           e.preventDefault();
           useEditorStore.getState().setActiveTool("pan");
         }
@@ -193,7 +202,13 @@ export default function EditorCanvas() {
       };
 
       const handleKeyUp = (e: KeyboardEvent) => {
-        if (e.code === "Space") {
+        const tag = (e.target as HTMLElement)?.tagName;
+        const isTyping =
+          tag === "INPUT" ||
+          tag === "TEXTAREA" ||
+          (e.target as HTMLElement)?.isContentEditable;
+
+        if (e.code === "Space" && !isTyping) {
           useEditorStore.getState().setActiveTool("select");
         }
       };
@@ -218,6 +233,7 @@ export default function EditorCanvas() {
         fabricCanvas.dispose();
         canvasInstanceRef.current = null;
         historyManagerInstance = null;
+        initedRef.current = false;
         setCanvas(null);
       }
       if (observer) observer.disconnect();
